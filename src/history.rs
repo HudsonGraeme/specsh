@@ -3,8 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub fn default_path() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
-        .join(".local/share/fish/fish_history")
+    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/fish/fish_history")
 }
 
 pub fn parse(path: &Path) -> io::Result<Vec<String>> {
@@ -52,7 +51,7 @@ fn parse_plain(data: &str) -> Vec<String> {
                 return None;
             }
             if let Some(rest) = l.strip_prefix(": ") {
-                return rest.splitn(2, ';').nth(1).map(str::to_string);
+                return rest.split_once(';').map(|x| x.1).map(str::to_string);
             }
             Some(l.to_string())
         })

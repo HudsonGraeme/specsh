@@ -1,8 +1,22 @@
 use std::path::Path;
 
 pub const WRAPPED_HEADS: &[&str] = &[
-    "cargo", "pytest", "go", "tsc", "eslint", "ruff", "mypy", "pyright", "shellcheck", "npm",
-    "pnpm", "yarn", "bun", "forge", "nargo", "uv",
+    "cargo",
+    "pytest",
+    "go",
+    "tsc",
+    "eslint",
+    "ruff",
+    "mypy",
+    "pyright",
+    "shellcheck",
+    "npm",
+    "pnpm",
+    "yarn",
+    "bun",
+    "forge",
+    "nargo",
+    "uv",
 ];
 
 const DENY_TOKENS: &[&str] = &["--fix", "--write", "-w", "--watch", "--fork-url"];
@@ -12,7 +26,7 @@ pub fn eligible(cmd: &str) -> Result<(), String> {
         return Err("multiline".to_string());
     }
     if let Some(c) = cmd.chars().find(|c| "|;&<>`".contains(*c)) {
-        return Err(format!("shell operator '{}'", c));
+        return Err(format!("shell operator '{c}'"));
     }
     if cmd.contains("$(") {
         return Err("command substitution".to_string());
@@ -23,7 +37,7 @@ pub fn eligible(cmd: &str) -> Result<(), String> {
     }
     for t in &toks {
         if DENY_TOKENS.contains(t) || t.starts_with("--fork-url") {
-            return Err(format!("denied flag {}", t));
+            return Err(format!("denied flag {t}"));
         }
     }
     let head = basename(toks[0]);
@@ -43,12 +57,12 @@ pub fn eligible(cmd: &str) -> Result<(), String> {
         }
         "forge" => matches!(second, "test" | "build"),
         "nargo" => second == "test",
-        _ => return Err(format!("head '{}' not in allowlist", head)),
+        _ => return Err(format!("head '{head}' not in allowlist")),
     };
     if ok {
         Ok(())
     } else {
-        Err(format!("'{} {}' not an output-valued form", head, second))
+        Err(format!("'{head} {second}' not an output-valued form"))
     }
 }
 

@@ -62,7 +62,7 @@ pub fn run_pipeline(
         let tree = match hash::tree_hash(cwd) {
             Ok(t) => t,
             Err(e) => {
-                out.push(o("skip", format!("tree hash failed: {}", e)));
+                out.push(o("skip", format!("tree hash failed: {e}")));
                 continue;
             }
         };
@@ -77,14 +77,14 @@ pub fn run_pipeline(
         let work = match clone::WorkClone::create(cwd, false) {
             Ok(w) => w,
             Err(e) => {
-                out.push(o("skip", format!("clone failed: {}", e)));
+                out.push(o("skip", format!("clone failed: {e}")));
                 continue;
             }
         };
         let res = match sandbox::run_opts(&work.path, cmd, timeout, true, true) {
             Ok(r) => r,
             Err(e) => {
-                out.push(o("skip", format!("spawn failed: {}", e)));
+                out.push(o("skip", format!("spawn failed: {e}")));
                 continue;
             }
         };
@@ -103,9 +103,9 @@ pub fn run_pipeline(
                 format!("tainted, {} sandbox denial(s)", denials.len()),
             ));
         } else if res.timed_out {
-            out.push(o("skip", format!("timed out after {:?}", timeout)));
+            out.push(o("skip", format!("timed out after {timeout:?}")));
         } else if let Some(needle) = smells_sandboxed(&res) {
-            out.push(o("skip", format!("output mentions '{}'", needle)));
+            out.push(o("skip", format!("output mentions '{needle}'")));
         } else {
             let entry = cache::Entry {
                 cwd: cwd_s.clone(),
@@ -126,7 +126,7 @@ pub fn run_pipeline(
                         entry.duration_ms as f64 / 1000.0
                     ),
                 )),
-                Err(e) => out.push(o("skip", format!("store failed: {}", e))),
+                Err(e) => out.push(o("skip", format!("store failed: {e}"))),
             }
         }
     }

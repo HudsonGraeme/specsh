@@ -31,7 +31,7 @@ pub fn fnv128(data: &[u8]) -> u128 {
 }
 
 pub fn hex128(h: u128) -> String {
-    format!("{:032x}", h)
+    format!("{h:032x}")
 }
 
 fn feed(h: &mut u128, data: &[u8]) {

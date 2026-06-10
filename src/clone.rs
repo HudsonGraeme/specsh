@@ -1,13 +1,15 @@
-use std::ffi::CString;
 use std::io;
-use std::os::raw::{c_char, c_int, c_uint};
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
-    fn clonefile(src: *const c_char, dst: *const c_char, flags: c_uint) -> c_int;
+    fn clonefile(
+        src: *const std::os::raw::c_char,
+        dst: *const std::os::raw::c_char,
+        flags: std::os::raw::c_uint,
+    ) -> std::os::raw::c_int;
 }
 
 pub struct WorkClone {
@@ -22,25 +24,48 @@ impl WorkClone {
             .map(|d| d.subsec_nanos())
             .unwrap_or(0);
         let dst = std::env::temp_dir().join(format!("specsh-{}-{}", std::process::id(), nanos));
-        let s = CString::new(src.as_os_str().as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "nul in path"))?;
-        let d = CString::new(dst.as_os_str().as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "nul in path"))?;
-        let rc = unsafe { clonefile(s.as_ptr(), d.as_ptr(), 0) };
-        if rc != 0 {
-            let status = Command::new("/bin/cp")
-                .arg("-R")
-                .arg(src)
-                .arg(&dst)
-                .status()?;
-            if !status.success() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "clonefile failed and cp -R fallback failed",
-                ));
-            }
-        }
+        cow_copy(src, &dst)?;
         Ok(WorkClone { path: dst, keep })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn cow_copy(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let s = CString::new(src.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "nul in path"))?;
+    let d = CString::new(dst.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "nul in path"))?;
+    let rc = unsafe { clonefile(s.as_ptr(), d.as_ptr(), 0) };
+    if rc == 0 {
+        return Ok(());
+    }
+    let status = Command::new("/bin/cp")
+        .arg("-R")
+        .arg(src)
+        .arg(dst)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(
+            "clonefile failed and cp -R fallback failed",
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cow_copy(src: &Path, dst: &Path) -> io::Result<()> {
+    let status = Command::new("cp")
+        .args(["-a", "--reflink=auto"])
+        .arg(src)
+        .arg(dst)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("cp --reflink=auto failed"))
     }
 }
 

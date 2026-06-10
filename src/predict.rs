@@ -34,11 +34,18 @@ impl Model {
 
     pub fn candidates(&self, after: &str, k: usize) -> Vec<Candidate> {
         let mut out: Vec<Candidate> = Vec::new();
+        if !after.is_empty() {
+            out.push(Candidate {
+                cmd: after.to_string(),
+                count: self.freq.get(after).copied().unwrap_or(1),
+                source: "rerun",
+            });
+        }
         if let Some(m) = self.trans.get(after) {
             let mut v: Vec<(&String, &u32)> = m.iter().collect();
             v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
             for (c, n) in v.into_iter().take(k) {
-                if *n >= 2 {
+                if *n >= 2 && !out.iter().any(|x| x.cmd == *c) {
                     out.push(Candidate {
                         cmd: c.clone(),
                         count: *n,
@@ -89,9 +96,11 @@ mod tests {
         ]);
         let m = Model::build(&hist);
         let c = m.candidates("vim src/main.rs", 3);
-        assert_eq!(c[0].cmd, "cargo test");
-        assert_eq!(c[0].source, "follows");
-        assert_eq!(c[0].count, 3);
+        assert_eq!(c[0].cmd, "vim src/main.rs");
+        assert_eq!(c[0].source, "rerun");
+        assert_eq!(c[1].cmd, "cargo test");
+        assert_eq!(c[1].source, "follows");
+        assert_eq!(c[1].count, 3);
     }
 
     #[test]
@@ -99,9 +108,9 @@ mod tests {
         let hist = v(&["cargo test", "cargo test", "cargo test", "ls"]);
         let m = Model::build(&hist);
         let c = m.candidates("never seen this", 3);
-        assert!(!c.is_empty());
-        assert_eq!(c[0].cmd, "cargo test");
-        assert_eq!(c[0].source, "frequent");
+        assert_eq!(c[0].source, "rerun");
+        let freq: Vec<&Candidate> = c.iter().filter(|x| x.source == "frequent").collect();
+        assert_eq!(freq[0].cmd, "cargo test");
     }
 
     #[test]

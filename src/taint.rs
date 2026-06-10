@@ -11,6 +11,12 @@ pub fn local_timestamp() -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn denials_since(_start: &str, _only_net_and_write: bool) -> Vec<String> {
+    Vec::new()
+}
+
+#[cfg(target_os = "macos")]
 pub fn denials_since(start: &str, only_net_and_write: bool) -> Vec<String> {
     let out = match Command::new("/usr/bin/log")
         .args([

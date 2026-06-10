@@ -40,8 +40,7 @@ pub fn root() -> PathBuf {
             return PathBuf::from(x).join("specsh");
         }
     }
-    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
-        .join(".cache/specsh")
+    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string())).join(".cache/specsh")
 }
 
 fn results_dir() -> PathBuf {
@@ -80,7 +79,7 @@ pub fn store(e: &Entry) -> io::Result<()> {
         buf.extend_from_slice(bytes);
         buf.push(b'\n');
     }
-    let tmp = dir.join(format!("{}.tmp", k));
+    let tmp = dir.join(format!("{k}.tmp"));
     fs::write(&tmp, &buf)?;
     fs::rename(&tmp, dir.join(k))
 }
@@ -98,7 +97,7 @@ fn read_line(data: &[u8], pos: &mut usize) -> Option<String> {
 
 fn read_blob(data: &[u8], pos: &mut usize, name: &str) -> Option<Vec<u8>> {
     let hdr = read_line(data, pos)?;
-    let n: usize = hdr.strip_prefix(&format!("{} ", name))?.parse().ok()?;
+    let n: usize = hdr.strip_prefix(&format!("{name} "))?.parse().ok()?;
     if *pos + n + 1 > data.len() {
         return None;
     }
@@ -113,13 +112,21 @@ pub fn read_entry(path: &Path) -> Option<Entry> {
     if read_line(&data, &mut pos)? != "specsh1" {
         return None;
     }
-    let exit_code = read_line(&data, &mut pos)?.strip_prefix("exit ")?.parse().ok()?;
-    let created = read_line(&data, &mut pos)?.strip_prefix("created ")?.parse().ok()?;
+    let exit_code = read_line(&data, &mut pos)?
+        .strip_prefix("exit ")?
+        .parse()
+        .ok()?;
+    let created = read_line(&data, &mut pos)?
+        .strip_prefix("created ")?
+        .parse()
+        .ok()?;
     let duration_ms = read_line(&data, &mut pos)?
         .strip_prefix("duration_ms ")?
         .parse()
         .ok()?;
-    let tree = read_line(&data, &mut pos)?.strip_prefix("tree ")?.to_string();
+    let tree = read_line(&data, &mut pos)?
+        .strip_prefix("tree ")?
+        .to_string();
     let cwd = String::from_utf8(read_blob(&data, &mut pos, "cwd")?).ok()?;
     let cmd = String::from_utf8(read_blob(&data, &mut pos, "cmd")?).ok()?;
     let stdout = read_blob(&data, &mut pos, "stdout")?;
@@ -152,10 +159,7 @@ pub fn list() -> Vec<Entry> {
 pub fn negative_add(cwd: &str, cmd: &str) -> io::Result<()> {
     let dir = negative_dir();
     fs::create_dir_all(&dir)?;
-    fs::write(
-        dir.join(key(cwd, cmd)),
-        format!("{}  [{}]", cmd, cwd),
-    )
+    fs::write(dir.join(key(cwd, cmd)), format!("{cmd}  [{cwd}]"))
 }
 
 pub fn negative_has(cwd: &str, cmd: &str) -> bool {

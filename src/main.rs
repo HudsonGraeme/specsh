@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{exit, Command};
+use std::process::{Command, exit};
 use std::time::Duration;
 
 mod cache;
@@ -17,10 +17,6 @@ mod taint;
 const TAINTED_EXIT: i32 = 113;
 
 fn main() {
-    if !cfg!(target_os = "macos") {
-        eprintln!("specsh: macOS only for now (clonefile + sandbox-exec)");
-        exit(1);
-    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("run") => cmd_run(&args[1..]),
@@ -38,7 +34,7 @@ fn main() {
 
 fn cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|e| {
-        eprintln!("specsh: cannot resolve cwd: {}", e);
+        eprintln!("specsh: cannot resolve cwd: {e}");
         exit(1);
     })
 }
@@ -60,7 +56,10 @@ fn flag_value(flags: &[String], name: &str) -> Option<String> {
 fn cmd_run(args: &[String]) -> ! {
     let (flags, cmd_parts) = split_dashdash(args);
     let timeout: u64 = flag_value(&flags, "--timeout")
-        .map(|v| v.parse().unwrap_or_else(|_| usage("--timeout requires seconds")))
+        .map(|v| {
+            v.parse()
+                .unwrap_or_else(|_| usage("--timeout requires seconds"))
+        })
         .unwrap_or(300);
     let keep = flags.iter().any(|a| a == "--keep");
     if cmd_parts.is_empty() {
@@ -69,12 +68,12 @@ fn cmd_run(args: &[String]) -> ! {
     let command = cmd_parts.join(" ");
     let started_at = taint::local_timestamp();
     let work = clone::WorkClone::create(&cwd(), keep).unwrap_or_else(|e| {
-        eprintln!("specsh: clone failed: {}", e);
+        eprintln!("specsh: clone failed: {e}");
         exit(1);
     });
-    let result = sandbox::run(&work.path, &command, Duration::from_secs(timeout))
-        .unwrap_or_else(|e| {
-            eprintln!("specsh: sandbox spawn failed: {}", e);
+    let result =
+        sandbox::run(&work.path, &command, Duration::from_secs(timeout)).unwrap_or_else(|e| {
+            eprintln!("specsh: sandbox spawn failed: {e}");
             exit(1);
         });
 
@@ -104,7 +103,7 @@ fn cmd_run(args: &[String]) -> ! {
             tainted.len()
         );
         for line in tainted.iter().take(5) {
-            eprintln!("  {}", line);
+            eprintln!("  {line}");
         }
         exit(TAINTED_EXIT);
     }
@@ -172,12 +171,7 @@ fn cmd_speculate(args: &[String]) {
         eprintln!("specsh: no candidates");
         return;
     }
-    let outcomes = spec::run_pipeline(
-        &cwd(),
-        &candidates,
-        max_runs,
-        Duration::from_secs(timeout),
-    );
+    let outcomes = spec::run_pipeline(&cwd(), &candidates, max_runs, Duration::from_secs(timeout));
     for o in &outcomes {
         eprintln!("specsh: [{}] {} ({})", o.action, o.cmd, o.detail);
     }
@@ -187,12 +181,12 @@ fn cmd_predict(args: &[String]) -> ! {
     let (flags, _) = split_dashdash(args);
     let after = flag_value(&flags, "--after").unwrap_or_default();
     let cmds = history::parse(&history::default_path()).unwrap_or_else(|e| {
-        eprintln!("specsh: cannot read history: {}", e);
+        eprintln!("specsh: cannot read history: {e}");
         exit(1);
     });
     let model = predict::Model::build(&cmds);
     let dir = cwd();
-    println!("after: {:?}", after);
+    println!("after: {after:?}");
     for c in model.candidates(&after, 6) {
         let verdict = match eligible::eligible(&c.cmd) {
             Ok(()) => {
@@ -203,9 +197,12 @@ fn cmd_predict(args: &[String]) -> ! {
                     "skip: no project marker".to_string()
                 }
             }
-            Err(r) => format!("skip: {}", r),
+            Err(r) => format!("skip: {r}"),
         };
-        println!("  {:>4}x  {:<9} {:<28} {}", c.count, c.source, verdict, c.cmd);
+        println!(
+            "  {:>4}x  {:<9} {:<28} {}",
+            c.count, c.source, verdict, c.cmd
+        );
     }
     exit(0);
 }
@@ -218,8 +215,8 @@ fn cmd_init() {
     println!("end");
     for head in eligible::WRAPPED_HEADS {
         println!();
-        println!("function {} --wraps {}", head, head);
-        println!("    command specsh exec -- {} $argv", head);
+        println!("function {head} --wraps {head}");
+        println!("    command specsh exec -- {head} $argv");
         println!("end");
     }
 }
@@ -251,14 +248,14 @@ fn cmd_status() {
     if !negatives.is_empty() {
         println!("negative (non-speculable):");
         for n in &negatives {
-            println!("  {}", n);
+            println!("  {n}");
         }
     }
 }
 
 fn usage(err: &str) -> ! {
     if !err.is_empty() {
-        eprintln!("specsh: {}", err);
+        eprintln!("specsh: {err}");
     }
     eprintln!("usage: specsh exec -- <command>             serve speculated result or exec live");
     eprintln!("       specsh speculate [--after CMD] [--only CMD] [--max N] [--timeout SECS]");
@@ -267,6 +264,6 @@ fn usage(err: &str) -> ! {
     eprintln!("       specsh init                          print fish integration (source it)");
     eprintln!("       specsh status                        show cache contents");
     eprintln!("       specsh profile                       print sandbox profile for cwd");
-    eprintln!("  exit {}: result tainted by a sandbox denial", TAINTED_EXIT);
+    eprintln!("  exit {TAINTED_EXIT}: result tainted by a sandbox denial");
     exit(2);
 }

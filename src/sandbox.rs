@@ -11,6 +11,7 @@ pub struct RunResult {
     pub duration: Duration,
 }
 
+#[cfg(target_os = "macos")]
 pub fn profile(clone_path: &Path) -> String {
     let mut allow_writes = vec![
         sb_path(clone_path),
@@ -28,12 +29,74 @@ pub fn profile(clone_path: &Path) -> String {
     )
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn profile(clone_path: &Path) -> String {
+    match sandboxed_command(clone_path, "<command>", false) {
+        Ok(c) => {
+            let mut parts = vec![c.get_program().to_string_lossy().to_string()];
+            parts.extend(c.get_args().map(|a| a.to_string_lossy().to_string()));
+            parts.join(" ") + "\n"
+        }
+        Err(e) => format!("unavailable: {e}\n"),
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn sb_path(p: &Path) -> String {
     let escaped = p
         .to_string_lossy()
         .replace('\\', "\\\\")
         .replace('"', "\\\"");
-    format!("(subpath \"{}\")", escaped)
+    format!("(subpath \"{escaped}\")")
+}
+
+#[cfg(target_os = "macos")]
+fn sandboxed_command(clone_path: &Path, command: &str, nice: bool) -> io::Result<Command> {
+    let mut cmd = if nice {
+        let mut c = Command::new("/usr/bin/nice");
+        c.args(["-n", "15", "/usr/bin/sandbox-exec"]);
+        c
+    } else {
+        Command::new("/usr/bin/sandbox-exec")
+    };
+    cmd.arg("-p")
+        .arg(profile(clone_path))
+        .arg("/bin/sh")
+        .arg("-c")
+        .arg(command);
+    Ok(cmd)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn sandboxed_command(clone_path: &Path, command: &str, nice: bool) -> io::Result<Command> {
+    let bwrap = ["/usr/bin/bwrap", "/usr/local/bin/bwrap", "/bin/bwrap"]
+        .iter()
+        .find(|p| Path::new(p).exists())
+        .ok_or_else(|| {
+            io::Error::other(
+                "bubblewrap (bwrap) is required on Linux; install it via your package manager",
+            )
+        })?;
+    let mut cmd = if nice {
+        let mut c = Command::new("nice");
+        c.args(["-n", "15", bwrap]);
+        c
+    } else {
+        Command::new(bwrap)
+    };
+    cmd.args(["--ro-bind", "/", "/"])
+        .args(["--tmpfs", "/tmp"])
+        .arg("--bind")
+        .arg(clone_path)
+        .arg(clone_path)
+        .args(["--dev", "/dev", "--proc", "/proc"])
+        .args(["--unshare-net", "--unshare-pid", "--die-with-parent"])
+        .arg("--chdir")
+        .arg(clone_path)
+        .arg("/bin/sh")
+        .arg("-c")
+        .arg(command);
+    Ok(cmd)
 }
 
 pub fn run(clone_path: &Path, command: &str, timeout: Duration) -> io::Result<RunResult> {
@@ -48,13 +111,7 @@ pub fn run_opts(
     force_color: bool,
 ) -> io::Result<RunResult> {
     let start = Instant::now();
-    let mut cmd = if nice {
-        let mut c = Command::new("/usr/bin/nice");
-        c.args(["-n", "15", "/usr/bin/sandbox-exec"]);
-        c
-    } else {
-        Command::new("/usr/bin/sandbox-exec")
-    };
+    let mut cmd = sandboxed_command(clone_path, command, nice)?;
     if force_color {
         cmd.env("CLICOLOR_FORCE", "1")
             .env("FORCE_COLOR", "1")
@@ -62,11 +119,6 @@ pub fn run_opts(
             .env("PY_COLORS", "1");
     }
     let mut child = cmd
-        .arg("-p")
-        .arg(profile(clone_path))
-        .arg("/bin/sh")
-        .arg("-c")
-        .arg(command)
         .current_dir(clone_path)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -130,7 +182,12 @@ mod tests {
     #[test]
     fn writes_inside_clone_allowed() {
         let d = tmp_workdir();
-        let r = run(&d, "echo x > made.txt && cat made.txt", Duration::from_secs(10)).unwrap();
+        let r = run(
+            &d,
+            "echo x > made.txt && cat made.txt",
+            Duration::from_secs(10),
+        )
+        .unwrap();
         assert_eq!(r.exit_code, 0);
         assert_eq!(String::from_utf8_lossy(&r.stdout), "x\n");
     }
@@ -139,7 +196,7 @@ mod tests {
     fn writes_outside_clone_denied() {
         let d = tmp_workdir();
         let target = std::env::var("HOME").unwrap() + "/.specsh_deny_probe";
-        let r = run(&d, &format!("touch {}", target), Duration::from_secs(10)).unwrap();
+        let r = run(&d, &format!("touch {target}"), Duration::from_secs(10)).unwrap();
         assert_ne!(r.exit_code, 0);
         assert!(!Path::new(&target).exists());
     }
