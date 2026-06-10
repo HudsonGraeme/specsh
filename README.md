@@ -66,6 +66,8 @@ source <(specsh init --shell bash)            # bash, in .bashrc
 
 This installs a hook that speculates in the background after each command (`fish_postexec`, zsh `precmd`, bash `PROMPT_COMMAND`) and wrapper functions that route eligible commands through `specsh exec`. The predictor reads whichever history file exists: fish, `.zsh_history`, or `.bash_history`.
 
+A cache miss also kicks off a detached speculation of that exact command, so the cache refills even in non-interactive shells where prompt hooks never fire, like scripts and coding agents. Rerunning an eligible command on an unchanged tree serves instantly from the second invocation on.
+
 ## Install
 
 From a release (each archive carries build provenance and a SHA256SUMS entry):

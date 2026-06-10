@@ -144,6 +144,15 @@ fn cmd_exec(args: &[String]) -> ! {
             "miss",
             &cmd_str,
         );
+        if let Ok(me) = std::env::current_exe() {
+            let _ = Command::new(me)
+                .args(["speculate", "--only", &cmd_str])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .process_group(0)
+                .spawn();
+        }
     }
     let err = Command::new(&argv[0]).args(&argv[1..]).exec();
     eprintln!("specsh: failed to exec {}: {}", argv[0], err);
