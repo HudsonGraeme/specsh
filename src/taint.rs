@@ -11,7 +11,7 @@ pub fn local_timestamp() -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-pub fn sandbox_denials_since(start: &str) -> Vec<String> {
+pub fn denials_since(start: &str, only_net_and_write: bool) -> Vec<String> {
     let out = match Command::new("/usr/bin/log")
         .args([
             "show",
@@ -30,6 +30,13 @@ pub fn sandbox_denials_since(start: &str) -> Vec<String> {
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .filter(|l| l.contains("deny"))
+        .filter(|l| {
+            if only_net_and_write {
+                l.contains("network") || l.contains("file-write")
+            } else {
+                true
+            }
+        })
         .map(str::to_string)
         .collect()
 }

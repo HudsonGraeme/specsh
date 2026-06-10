@@ -37,8 +37,31 @@ fn sb_path(p: &Path) -> String {
 }
 
 pub fn run(clone_path: &Path, command: &str, timeout: Duration) -> io::Result<RunResult> {
+    run_opts(clone_path, command, timeout, false, false)
+}
+
+pub fn run_opts(
+    clone_path: &Path,
+    command: &str,
+    timeout: Duration,
+    nice: bool,
+    force_color: bool,
+) -> io::Result<RunResult> {
     let start = Instant::now();
-    let mut child = Command::new("/usr/bin/sandbox-exec")
+    let mut cmd = if nice {
+        let mut c = Command::new("/usr/bin/nice");
+        c.args(["-n", "15", "/usr/bin/sandbox-exec"]);
+        c
+    } else {
+        Command::new("/usr/bin/sandbox-exec")
+    };
+    if force_color {
+        cmd.env("CLICOLOR_FORCE", "1")
+            .env("FORCE_COLOR", "1")
+            .env("CARGO_TERM_COLOR", "always")
+            .env("PY_COLORS", "1");
+    }
+    let mut child = cmd
         .arg("-p")
         .arg(profile(clone_path))
         .arg("/bin/sh")
