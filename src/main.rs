@@ -93,7 +93,7 @@ fn main() {
             );
             if !tainted.is_empty() {
                 eprintln!(
-                    "specsh: TAINTED — {} sandbox denial(s) during run; this failure may be sandbox-induced, not real:",
+                    "specsh: TAINTED, {} sandbox denial(s) during run; this failure may be sandbox-induced, not real:",
                     tainted.len()
                 );
                 for line in tainted.iter().take(5) {
