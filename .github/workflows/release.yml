@@ -89,9 +89,11 @@ jobs:
           subject-path: artifacts/*.tar.gz
 
       - name: Create release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          files: |
-            artifacts/*.tar.gz
-            artifacts/SHA256SUMS
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            artifacts/*.tar.gz artifacts/SHA256SUMS

@@ -1,4 +1,4 @@
-use crate::{cache, clone, eligible, hash, sandbox, taint};
+use crate::{cache, clone, eligible, hash, sandbox, stats, taint};
 use std::path::Path;
 use std::time::Duration;
 
@@ -74,6 +74,7 @@ pub fn run_pipeline(
         }
         runs += 1;
         let started_at = taint::local_timestamp();
+        let cpu_before = stats::children_cpu();
         let work = match clone::WorkClone::create(cwd, false) {
             Ok(w) => w,
             Err(e) => {
@@ -89,6 +90,8 @@ pub fn run_pipeline(
             }
         };
         drop(work);
+        let cpu_after = stats::children_cpu();
+        let spec_cpu_ms = cpu_after.cpu_ms.saturating_sub(cpu_before.cpu_ms);
 
         let mut denials = Vec::new();
         if res.exit_code != 0
@@ -96,16 +99,19 @@ pub fn run_pipeline(
         {
             denials = taint::denials_since(start, true);
         }
-        if !denials.is_empty() {
+        let outcome = if !denials.is_empty() {
             let _ = cache::negative_add(&cwd_s, cmd);
             out.push(o(
                 "negative",
                 format!("tainted, {} sandbox denial(s)", denials.len()),
             ));
+            "negative"
         } else if res.timed_out {
             out.push(o("skip", format!("timed out after {timeout:?}")));
+            "timeout"
         } else if let Some(needle) = smells_sandboxed(&res) {
             out.push(o("skip", format!("output mentions '{needle}'")));
+            "suspicious"
         } else {
             let entry = cache::Entry {
                 cwd: cwd_s.clone(),
@@ -118,17 +124,31 @@ pub fn run_pipeline(
                 stderr: res.stderr,
             };
             match cache::store(&entry) {
-                Ok(()) => out.push(o(
-                    "cached",
-                    format!(
-                        "exit {} in {:.1}s",
-                        entry.exit_code,
-                        entry.duration_ms as f64 / 1000.0
-                    ),
-                )),
-                Err(e) => out.push(o("skip", format!("store failed: {e}"))),
+                Ok(()) => {
+                    out.push(o(
+                        "cached",
+                        format!(
+                            "exit {} in {:.1}s",
+                            entry.exit_code,
+                            entry.duration_ms as f64 / 1000.0
+                        ),
+                    ));
+                    "cached"
+                }
+                Err(e) => {
+                    out.push(o("skip", format!("store failed: {e}")));
+                    "store-failed"
+                }
             }
-        }
+        };
+        stats::record(
+            "spec",
+            res.duration.as_millis() as u64,
+            spec_cpu_ms,
+            cpu_after.maxrss_bytes,
+            outcome,
+            cmd,
+        );
     }
     out
 }

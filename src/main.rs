@@ -12,6 +12,7 @@ mod history;
 mod predict;
 mod sandbox;
 mod spec;
+mod stats;
 mod taint;
 
 const TAINTED_EXIT: i32 = 113;
@@ -28,6 +29,7 @@ fn main() {
         }
         Some("init") => cmd_init(),
         Some("status") => cmd_status(),
+        Some("stats") => stats::print_summary(),
         _ => usage(""),
     }
 }
@@ -118,20 +120,30 @@ fn cmd_exec(args: &[String]) -> ! {
     let cmd_str = cache::join_args(&argv);
     let dir = cwd();
     let dir_s = dir.to_string_lossy().to_string();
-    if eligible::eligible(&cmd_str).is_ok()
-        && eligible::marker_present(&dir, &argv[0])
-        && let Ok(tree) = hash::tree_hash(&dir)
-        && let Some(e) = cache::load(&dir_s, &cmd_str)
-        && e.fresh(&tree)
-    {
-        std::io::stdout().write_all(&e.stdout).ok();
-        std::io::stderr().write_all(&e.stderr).ok();
-        eprintln!(
-            "specsh: served speculated result from {}s ago, saved ~{:.1}s",
-            e.age(),
-            e.duration_ms as f64 / 1000.0
+    if eligible::eligible(&cmd_str).is_ok() && eligible::marker_present(&dir, &argv[0]) {
+        let lookup = std::time::Instant::now();
+        if let Ok(tree) = hash::tree_hash(&dir)
+            && let Some(e) = cache::load(&dir_s, &cmd_str)
+            && e.fresh(&tree)
+        {
+            std::io::stdout().write_all(&e.stdout).ok();
+            std::io::stderr().write_all(&e.stderr).ok();
+            eprintln!(
+                "specsh: served speculated result from {}s ago, saved ~{:.1}s",
+                e.age(),
+                e.duration_ms as f64 / 1000.0
+            );
+            stats::record("serve", e.duration_ms, e.age(), 0, "hit", &cmd_str);
+            exit(e.exit_code);
+        }
+        stats::record(
+            "miss",
+            lookup.elapsed().as_millis() as u64,
+            0,
+            0,
+            "miss",
+            &cmd_str,
         );
-        exit(e.exit_code);
     }
     let err = Command::new(&argv[0]).args(&argv[1..]).exec();
     eprintln!("specsh: failed to exec {}: {}", argv[0], err);
@@ -262,6 +274,7 @@ fn usage(err: &str) -> ! {
     eprintln!("       specsh run [--timeout SECS] [--keep] -- <command>");
     eprintln!("       specsh init                          print fish integration (source it)");
     eprintln!("       specsh status                        show cache contents");
+    eprintln!("       specsh stats                         speculation cost vs payoff");
     eprintln!("       specsh profile                       print sandbox profile for cwd");
     eprintln!("  exit {TAINTED_EXIT}: result tainted by a sandbox denial");
     exit(2);

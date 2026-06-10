@@ -47,9 +47,12 @@ specsh speculate [--after CMD] [--only CMD] [--max N] [--timeout SECS]
 specsh predict [--after CMD]  show predictions and their eligibility verdicts
 specsh run [--timeout SECS] [--keep] -- <command>
 specsh status                 show cached results and the negative cache
+specsh stats                  speculation cost vs payoff
 specsh init                   print the fish integration
 specsh profile                print the sandbox configuration for the cwd
 ```
+
+`specsh stats` answers whether speculation is earning its keep: background CPU and peak memory spent on speculative runs (measured via `getrusage`), foreground waiting avoided by served results, hit rate, and the net, per command. The ledger is a local file under `~/.cache/specsh`; nothing leaves the machine.
 
 `specsh run` is the engine standalone: run anything against a disposable clone with no network and no side effects. Exit 113 means the failure was sandbox-induced.
 
@@ -81,12 +84,12 @@ git clone https://github.com/HudsonGraeme/specsh
 cd specsh && cargo install --path .
 ```
 
+## License
+
+MIT.
+
 ## Limitations
 
 - Output only: a served `cargo test` does not warm your real `target/`, so a later live build may recompile. Artifact promotion is deliberately out of scope.
 - Taint detection on macOS reads the unified log in the run's time window; unrelated denials can false-positive, which errs in the safe direction (the command just runs live). Linux relies on output heuristics.
 - The eligibility allowlist is intentionally small. Growing it is a one-line change per toolchain; being wrong in the other direction is not.
-
-## Sibling project
-
-histmine mines your shell history for repeated command templates and synthesizes the fish functions you have been writing by hand. specsh decides what you will run next; histmine figures out what you have been running all along.
