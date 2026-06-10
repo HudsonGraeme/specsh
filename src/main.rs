@@ -27,7 +27,7 @@ fn main() {
         Some("profile") => {
             print!("{}", sandbox::profile(&cwd()));
         }
-        Some("init") => cmd_init(),
+        Some("init") => cmd_init(&args[1..]),
         Some("status") => cmd_status(),
         Some("stats") => stats::print_summary(),
         _ => usage(""),
@@ -218,17 +218,67 @@ fn cmd_predict(args: &[String]) -> ! {
     exit(0);
 }
 
-fn cmd_init() {
-    println!("function __specsh_postexec --on-event fish_postexec");
-    println!("    test -n \"$argv[1]\"; or return");
-    println!("    command specsh speculate --after \"$argv[1]\" </dev/null >/dev/null 2>&1 &");
-    println!("    disown 2>/dev/null");
-    println!("end");
-    for head in eligible::WRAPPED_HEADS {
-        println!();
-        println!("function {head} --wraps {head}");
-        println!("    command specsh exec -- {head} $argv");
-        println!("end");
+fn cmd_init(args: &[String]) {
+    let shell = flag_value(args, "--shell").unwrap_or_else(|| "fish".to_string());
+    match shell.as_str() {
+        "fish" => {
+            println!("function __specsh_postexec --on-event fish_postexec");
+            println!("    test -n \"$argv[1]\"; or return");
+            println!(
+                "    command specsh speculate --after \"$argv[1]\" </dev/null >/dev/null 2>&1 &"
+            );
+            println!("    disown 2>/dev/null");
+            println!("end");
+            for head in eligible::WRAPPED_HEADS {
+                println!();
+                println!("function {head} --wraps {head}");
+                println!("    command specsh exec -- {head} $argv");
+                println!("end");
+            }
+        }
+        "zsh" => {
+            println!("__specsh_preexec() {{ __specsh_last=\"$1\"; }}");
+            println!("__specsh_precmd() {{");
+            println!("    if [ -n \"$__specsh_last\" ]; then");
+            println!(
+                "        command specsh speculate --after \"$__specsh_last\" </dev/null >/dev/null 2>&1 &!"
+            );
+            println!("        __specsh_last=\"\"");
+            println!("    fi");
+            println!("}}");
+            println!("autoload -Uz add-zsh-hook");
+            println!("add-zsh-hook preexec __specsh_preexec");
+            println!("add-zsh-hook precmd __specsh_precmd");
+            for head in eligible::WRAPPED_HEADS {
+                println!();
+                println!("{head}() {{ command specsh exec -- {head} \"$@\"; }}");
+            }
+        }
+        "bash" => {
+            println!("__specsh_hook() {{");
+            println!("    local last");
+            println!(
+                "    last=$(HISTTIMEFORMAT= builtin history 1 2>/dev/null | sed 's/^ *[0-9]* *//')"
+            );
+            println!("    if [ -n \"$last\" ] && [ \"$last\" != \"$__specsh_prev\" ]; then");
+            println!("        __specsh_prev=\"$last\"");
+            println!(
+                "        {{ command specsh speculate --after \"$last\" </dev/null >/dev/null 2>&1 & disown; }} 2>/dev/null"
+            );
+            println!("    fi");
+            println!("}}");
+            println!("case \"$PROMPT_COMMAND\" in");
+            println!("    *__specsh_hook*) ;;");
+            println!(
+                "    *) PROMPT_COMMAND=\"__specsh_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}\" ;;"
+            );
+            println!("esac");
+            for head in eligible::WRAPPED_HEADS {
+                println!();
+                println!("{head}() {{ command specsh exec -- {head} \"$@\"; }}");
+            }
+        }
+        other => usage(&format!("unknown shell '{other}' (fish, zsh, bash)")),
     }
 }
 
@@ -272,7 +322,7 @@ fn usage(err: &str) -> ! {
     eprintln!("       specsh speculate [--after CMD] [--only CMD] [--max N] [--timeout SECS]");
     eprintln!("       specsh predict [--after CMD]         show predictions and eligibility");
     eprintln!("       specsh run [--timeout SECS] [--keep] -- <command>");
-    eprintln!("       specsh init                          print fish integration (source it)");
+    eprintln!("       specsh init [--shell fish|zsh|bash]  print shell integration (source it)");
     eprintln!("       specsh status                        show cache contents");
     eprintln!("       specsh stats                         speculation cost vs payoff");
     eprintln!("       specsh profile                       print sandbox profile for cwd");

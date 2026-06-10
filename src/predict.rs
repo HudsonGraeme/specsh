@@ -35,11 +35,22 @@ impl Model {
     pub fn candidates(&self, after: &str, k: usize) -> Vec<Candidate> {
         let mut out: Vec<Candidate> = Vec::new();
         if !after.is_empty() {
-            out.push(Candidate {
-                cmd: after.to_string(),
-                count: self.freq.get(after).copied().unwrap_or(1),
-                source: "rerun",
-            });
+            let mut segs: Vec<&str> = after
+                .split("&&")
+                .flat_map(|s| s.split(';'))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            segs.reverse();
+            for seg in segs {
+                if !out.iter().any(|x| x.cmd == seg) {
+                    out.push(Candidate {
+                        cmd: seg.to_string(),
+                        count: self.freq.get(seg).copied().unwrap_or(1),
+                        source: "rerun",
+                    });
+                }
+            }
         }
         if let Some(m) = self.trans.get(after) {
             let mut v: Vec<(&String, &u32)> = m.iter().collect();
@@ -111,6 +122,16 @@ mod tests {
         assert_eq!(c[0].source, "rerun");
         let freq: Vec<&Candidate> = c.iter().filter(|x| x.source == "frequent").collect();
         assert_eq!(freq[0].cmd, "cargo test");
+    }
+
+    #[test]
+    fn compound_context_splits_into_segment_reruns() {
+        let m = Model::build(&v(&["ls", "pwd"]));
+        let c = m.candidates("cargo build && cargo test", 4);
+        assert_eq!(c[0].cmd, "cargo test");
+        assert_eq!(c[0].source, "rerun");
+        assert_eq!(c[1].cmd, "cargo build");
+        assert_eq!(c[1].source, "rerun");
     }
 
     #[test]

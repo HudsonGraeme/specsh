@@ -3,7 +3,18 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub fn default_path() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share/fish/fish_history")
+    let home = PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let candidates = [
+        home.join(".local/share/fish/fish_history"),
+        home.join(".zsh_history"),
+        home.join(".bash_history"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return c.clone();
+        }
+    }
+    candidates[0].clone()
 }
 
 pub fn parse(path: &Path) -> io::Result<Vec<String>> {

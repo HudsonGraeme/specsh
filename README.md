@@ -56,13 +56,15 @@ specsh profile                print the sandbox configuration for the cwd
 
 `specsh run` is the engine standalone: run anything against a disposable clone with no network and no side effects. Exit 113 means the failure was sandbox-induced.
 
-Close the loop in `config.fish`:
+Close the loop in your shell config:
 
 ```
-specsh init | source
+specsh init | source                          # fish, in config.fish
+source <(specsh init --shell zsh)             # zsh, in .zshrc
+source <(specsh init --shell bash)            # bash, in .bashrc
 ```
 
-This installs a `fish_postexec` hook that speculates in the background and wrapper functions that route eligible commands through `specsh exec`.
+This installs a hook that speculates in the background after each command (`fish_postexec`, zsh `precmd`, bash `PROMPT_COMMAND`) and wrapper functions that route eligible commands through `specsh exec`. The predictor reads whichever history file exists: fish, `.zsh_history`, or `.bash_history`.
 
 ## Install
 
