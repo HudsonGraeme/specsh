@@ -78,10 +78,10 @@ fn cmd_run(args: &[String]) -> ! {
         });
 
     let mut tainted = Vec::new();
-    if result.exit_code != 0 {
-        if let Some(start) = started_at {
-            tainted = taint::denials_since(&start, false);
-        }
+    if result.exit_code != 0
+        && let Some(start) = started_at
+    {
+        tainted = taint::denials_since(&start, false);
     }
 
     std::io::stdout().write_all(&result.stdout).ok();
@@ -118,21 +118,20 @@ fn cmd_exec(args: &[String]) -> ! {
     let cmd_str = cache::join_args(&argv);
     let dir = cwd();
     let dir_s = dir.to_string_lossy().to_string();
-    if eligible::eligible(&cmd_str).is_ok() && eligible::marker_present(&dir, &argv[0]) {
-        if let Ok(tree) = hash::tree_hash(&dir) {
-            if let Some(e) = cache::load(&dir_s, &cmd_str) {
-                if e.fresh(&tree) {
-                    std::io::stdout().write_all(&e.stdout).ok();
-                    std::io::stderr().write_all(&e.stderr).ok();
-                    eprintln!(
-                        "specsh: served speculated result from {}s ago, saved ~{:.1}s",
-                        e.age(),
-                        e.duration_ms as f64 / 1000.0
-                    );
-                    exit(e.exit_code);
-                }
-            }
-        }
+    if eligible::eligible(&cmd_str).is_ok()
+        && eligible::marker_present(&dir, &argv[0])
+        && let Ok(tree) = hash::tree_hash(&dir)
+        && let Some(e) = cache::load(&dir_s, &cmd_str)
+        && e.fresh(&tree)
+    {
+        std::io::stdout().write_all(&e.stdout).ok();
+        std::io::stderr().write_all(&e.stderr).ok();
+        eprintln!(
+            "specsh: served speculated result from {}s ago, saved ~{:.1}s",
+            e.age(),
+            e.duration_ms as f64 / 1000.0
+        );
+        exit(e.exit_code);
     }
     let err = Command::new(&argv[0]).args(&argv[1..]).exec();
     eprintln!("specsh: failed to exec {}: {}", argv[0], err);

@@ -35,10 +35,10 @@ pub fn now() -> u64 {
 }
 
 pub fn root() -> PathBuf {
-    if let Ok(x) = std::env::var("XDG_CACHE_HOME") {
-        if !x.is_empty() {
-            return PathBuf::from(x).join("specsh");
-        }
+    if let Ok(x) = std::env::var("XDG_CACHE_HOME")
+        && !x.is_empty()
+    {
+        return PathBuf::from(x).join("specsh");
     }
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string())).join(".cache/specsh")
 }

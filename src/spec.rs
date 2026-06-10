@@ -66,11 +66,11 @@ pub fn run_pipeline(
                 continue;
             }
         };
-        if let Some(e) = cache::load(&cwd_s, cmd) {
-            if e.fresh(&tree) {
-                out.push(o("skip", "already cached and fresh".to_string()));
-                continue;
-            }
+        if let Some(e) = cache::load(&cwd_s, cmd)
+            && e.fresh(&tree)
+        {
+            out.push(o("skip", "already cached and fresh".to_string()));
+            continue;
         }
         runs += 1;
         let started_at = taint::local_timestamp();
@@ -91,10 +91,10 @@ pub fn run_pipeline(
         drop(work);
 
         let mut denials = Vec::new();
-        if res.exit_code != 0 {
-            if let Some(start) = &started_at {
-                denials = taint::denials_since(start, true);
-            }
+        if res.exit_code != 0
+            && let Some(start) = &started_at
+        {
+            denials = taint::denials_since(start, true);
         }
         if !denials.is_empty() {
             let _ = cache::negative_add(&cwd_s, cmd);
